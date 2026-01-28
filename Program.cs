@@ -188,6 +188,7 @@ namespace DominoGame
         private readonly IBoard _board;
         private IBoneyard _boneyard;
         private int _currentPlayerIndex;
+        private int _roundLeaderIndex = -1;
         private int _consecutivePasses;
         private bool _roundEnded;
         private readonly int _maxScoreToWin;
@@ -210,12 +211,13 @@ namespace DominoGame
         public void StartRound()
         {
             ResetRound();
+            DecideFirstPlayer();
             DealInitialHands();
         }
 
         public void PlayerAction()
         {
-            if (_roundEnded) return;
+            if (_roundEnded || IsGameEnded) return;
 
             var player = GetCurrentPlayer();
             TurnStarted?.Invoke(player, EventArgs.Empty);
@@ -226,13 +228,17 @@ namespace DominoGame
                 HandlePass(player);
 
             CheckRoundEnd();
-            MoveNext();
+            MoveNextPlayer();
         }
+
+        // ================= TURN HANDLING =================
 
         private void HandlePlay(IPlayer player)
         {
             var domino = player.Hand.First(d => _board.CanPlace(d));
-            var side = _board.CanPlace(domino, BoardSide.Left) ? BoardSide.Left : BoardSide.Right;
+            var side = _board.CanPlace(domino, BoardSide.Left)
+                ? BoardSide.Left
+                : BoardSide.Right;
 
             _board.Place(domino, side);
             player.Hand.Remove(domino);
@@ -243,29 +249,72 @@ namespace DominoGame
 
         private void HandlePass(IPlayer player)
         {
+            // RULE: no draw, just pass
             _consecutivePasses++;
-            if (!_boneyard.IsEmpty)
-                player.Hand.Add(_boneyard.Draw());
         }
+
+        // ================= ROUND END =================
 
         private void CheckRoundEnd()
         {
-            var winner = _players.FirstOrDefault(p => p.Hand.Count == 0);
-            if (winner != null || _consecutivePasses >= _players.Count)
+            // Normal win
+            var emptyPlayer = _players.FirstOrDefault(p => p.Hand.Count == 0);
+            if (emptyPlayer != null)
             {
                 _roundEnded = true;
-                RoundEnded?.Invoke(winner, EventArgs.Empty);
-                UpdateScore(winner);
-                CheckGameEnd();
+                HandleNormalWin(emptyPlayer);
+                return;
+            }
+
+            // Blocked game
+            if (_consecutivePasses >= _players.Count)
+            {
+                _roundEnded = true;
+                HandleBlockedGame();
             }
         }
 
-        private void UpdateScore(IPlayer? winner)
+        private void HandleNormalWin(IPlayer winner)
         {
-            if (winner == null) return;
-            winner.Score += _players.Where(p => p != winner)
-                .Sum(p => p.Hand.Sum(d => (int)d.LeftPip + (int)d.RightPip));
+            int score = _players
+                .Where(p => p != winner)
+                .SelectMany(p => p.Hand)
+                .Sum(d => (int)d.LeftPip + (int)d.RightPip);
+
+            winner.Score += score;
+            RoundEnded?.Invoke(winner, EventArgs.Empty);
+            CheckGameEnd();
         }
+
+        private void HandleBlockedGame()
+        {
+            var pipTotals = _players.ToDictionary(
+                p => p,
+                p => CountPips(p.Hand)
+            );
+
+            int min = pipTotals.Min(x => x.Value);
+            var lowestPlayers = pipTotals.Where(x => x.Value == min).ToList();
+
+            // Tie → no winner
+            if (lowestPlayers.Count > 1)
+            {
+                RoundEnded?.Invoke(null, EventArgs.Empty);
+                return;
+            }
+
+            var winner = lowestPlayers.First().Key;
+
+            int others = pipTotals
+                .Where(x => x.Key != winner)
+                .Sum(x => x.Value);
+
+            winner.Score += others - pipTotals[winner];
+            RoundEnded?.Invoke(winner, EventArgs.Empty);
+            CheckGameEnd();
+        }
+
+        // ================= GAME END =================
 
         private void CheckGameEnd()
         {
@@ -277,14 +326,27 @@ namespace DominoGame
             }
         }
 
+        // ================= SETUP =================
+
+        private void DecideFirstPlayer()
+        {
+            if (_roundLeaderIndex == -1)
+                _roundLeaderIndex = new Random().Next(_players.Count);
+            else
+                _roundLeaderIndex = (_roundLeaderIndex + 1) % _players.Count;
+
+            _currentPlayerIndex = _roundLeaderIndex;
+        }
+
         private void ResetRound()
         {
             _board.Reset();
             _boneyard = new Boneyard(GenerateFullSet());
-            _currentPlayerIndex = 0;
             _consecutivePasses = 0;
             _roundEnded = false;
-            foreach (var p in _players) p.Hand.Clear();
+
+            foreach (var p in _players)
+                p.Hand.Clear();
         }
 
         private void DealInitialHands()
@@ -296,7 +358,9 @@ namespace DominoGame
 
         private bool CanPlay(IPlayer player) => player.Hand.Any(d => _board.CanPlace(d));
 
-        private void MoveNext() => _currentPlayerIndex = (_currentPlayerIndex + 1) % _players.Count;
+        private void MoveNextPlayer() => _currentPlayerIndex = (_currentPlayerIndex + 1) % _players.Count;
+
+        private int CountPips(IEnumerable<IDomino> dominoes) => dominoes.Sum(d => (int)d.LeftPip + (int)d.RightPip);
 
         private IEnumerable<IDomino> GenerateFullSet()
         {
