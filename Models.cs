@@ -114,14 +114,12 @@ namespace DominoGame
 
     public class Player : IPlayer
     {
-        public int Id { get; }
         public string Name { get; }
         public int Score { get; set; }
         public List<IDomino> Hand { get; } = new();
 
-        public Player(int id, string name)
+        public Player(string name)
         {
-            Id = id;
             Name = name;
         }
     }

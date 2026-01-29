@@ -17,7 +17,7 @@ namespace DominoGame
             {
                 Console.Write($"Nama player {i + 1}: ");
                 string name = Console.ReadLine()!;
-                controller.AddPlayer(new Player(i + 1, name));
+                controller.AddPlayer(new Player(name));
             }
 
             controller.SortPlayersByName();
