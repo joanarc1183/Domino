@@ -230,6 +230,9 @@ namespace DominoGame
                 HandlePlay(player);
             else
                 HandlePass(player);
+                // kalau setelah pass langsung round ended, jangan spam pesan
+                if (_roundEnded)
+                    return;
 
             CheckRoundEnd();
             MoveNextPlayer();
@@ -239,63 +242,77 @@ namespace DominoGame
 
         private void HandlePlay(IPlayer player)
         {
-            Console.WriteLine("\nChoose a domino index to play (-1 to pass):");
+            var playableIndexes = GetPlayableDominoIndexes(player);
+
+            // 🚫 Kalau benar-benar tidak ada kartu valid → pass
+            if (playableIndexes.Count == 0)
+            {
+                Console.WriteLine($"{player.Name} has no playable dominoes.");
+                HandlePass(player);
+                return;
+            }
+
+            Console.WriteLine("\nChoose a domino index to play:");
 
             for (int i = 0; i < player.Hand.Count; i++)
                 Console.WriteLine($"{i}. {player.Hand[i]}");
 
-            int choice;
-            while (!int.TryParse(Console.ReadLine(), out choice) ||
-                (choice < -1 || choice >= player.Hand.Count))
+            while (true)
             {
-                Console.Write("Invalid input. Choose again: ");
-            }
+                Console.Write("> ");
+                if (!int.TryParse(Console.ReadLine(), out int choice))
+                {
+                    Console.WriteLine("Invalid input.");
+                    continue;
+                }
 
-            if (choice == -1)
-            {
-                HandlePass(player);
-                return;
-            }
+                // ❌ player mencoba pass padahal bisa main
+                if (choice == -1)
+                {
+                    Console.WriteLine("You have playable dominoes. You must play one.");
+                    ShowPlayableDominoes(player, playableIndexes);
+                    continue;
+                }
 
-            var domino = player.Hand[choice];
+                if (choice < 0 || choice >= player.Hand.Count)
+                {
+                    Console.WriteLine("Index out of range.");
+                    continue;
+                }
 
-            bool canLeft = _board.CanPlace(domino, BoardSide.Left);
-            bool canRight = _board.CanPlace(domino, BoardSide.Right);
+                // ❌ domino tidak bisa dimainkan
+                if (!playableIndexes.Contains(choice))
+                {
+                    Console.WriteLine("That domino cannot be played.");
+                    ShowPlayableDominoes(player, playableIndexes);
+                    continue; // 🔁 ulang input
+                }
 
-            if (!canLeft && !canRight)
-            {
-                Console.WriteLine("That domino cannot be placed. You lose your turn.");
-                HandlePass(player);
-                return;
-            }
+                // ✅ domino valid
+                var domino = player.Hand[choice];
 
-            BoardSide side;
-
-            if (canLeft && canRight)
-            {
+                // Board masih kosong → langsung taruh
                 if (_board.IsEmpty)
                 {
-                    side = BoardSide.Left;
-                } else
-                {
-                    side = AskSide();
+                    _board.Place(domino, BoardSide.Left);
                 }
-            }
-            else if (canLeft)
-            {
-                side = BoardSide.Left;
-            }
-            else
-            {
-                side = BoardSide.Right;
-            }
+                else
+                {
+                    bool canLeft = _board.CanPlace(domino, BoardSide.Left);
+                    bool canRight = _board.CanPlace(domino, BoardSide.Right);
 
-            _board.Place(domino, side);
+                    BoardSide side = (canLeft && canRight)
+                        ? AskSide()
+                        : (canLeft ? BoardSide.Left : BoardSide.Right);
 
-            player.Hand.Remove(domino);
-            _consecutivePasses = 0;
+                    _board.Place(domino, side);
+                }
 
-            ActionExecuted?.Invoke(player, EventArgs.Empty);
+                player.Hand.RemoveAt(choice);
+                _consecutivePasses = 0;
+                ActionExecuted?.Invoke(player, EventArgs.Empty);
+                break;
+            }
         }
 
         private void HandlePass(IPlayer player)
@@ -321,6 +338,32 @@ namespace DominoGame
 
                 Console.Write("Invalid input. Enter L or R: ");
             }
+        }
+
+        private List<int> GetPlayableDominoIndexes(IPlayer player)
+        {
+            var playable = new List<int>();
+
+            for (int i = 0; i < player.Hand.Count; i++)
+            {
+                var d = player.Hand[i];
+
+                if (_board.IsEmpty ||
+                    _board.CanPlace(d, BoardSide.Left) ||
+                    _board.CanPlace(d, BoardSide.Right))
+                {
+                    playable.Add(i);
+                }
+            }
+
+            return playable;
+        }
+
+        private void ShowPlayableDominoes(IPlayer player, List<int> playableIndexes)
+        {
+            Console.WriteLine("Playable dominoes:");
+            foreach (var i in playableIndexes)
+                Console.WriteLine($"  {i}. {player.Hand[i]}");
         }
 
 
@@ -494,6 +537,7 @@ namespace DominoGame
                 else
                     Console.WriteLine("Round ended in a tie.");
 
+                RenderHandsAtRoundEnd();
                 RenderScores();
             };
 
@@ -521,6 +565,25 @@ namespace DominoGame
             Console.WriteLine("\nCurrent Scores:");
             foreach (var p in _controller.Players)
                 Console.WriteLine($"{p.Name} : {p.Score} points");
+        }
+
+        private void RenderHandsAtRoundEnd()
+        {
+            Console.WriteLine("\nHands at round end:");
+            foreach (var p in _controller.Players)
+            {
+                Console.Write($"{p.Name}: ");
+                if (p.Hand.Count == 0)
+                {
+                    Console.WriteLine("(empty)");
+                }
+                else
+                {
+                    foreach (var d in p.Hand)
+                        Console.Write($"{d} ");
+                    Console.WriteLine();
+                }
+            }
         }
 
 
