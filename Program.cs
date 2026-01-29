@@ -197,6 +197,10 @@ namespace DominoGame
         public bool IsGameEnded { get; private set; }
         public IPlayer? GameWinner { get; private set; }
 
+        public IEnumerable<IDomino> BoardDominoes => _board.Dominoes;
+        public bool BoardEmpty => _board.IsEmpty;
+        public IEnumerable<IPlayer> Players => _players;
+
         public GameController(int maxScoreToWin)
         {
             _maxScoreToWin = maxScoreToWin;
@@ -235,12 +239,59 @@ namespace DominoGame
 
         private void HandlePlay(IPlayer player)
         {
-            var domino = player.Hand.First(d => _board.CanPlace(d));
-            var side = _board.CanPlace(domino, BoardSide.Left)
-                ? BoardSide.Left
-                : BoardSide.Right;
+            Console.WriteLine("\nChoose a domino index to play (-1 to pass):");
+
+            for (int i = 0; i < player.Hand.Count; i++)
+                Console.WriteLine($"{i}. {player.Hand[i]}");
+
+            int choice;
+            while (!int.TryParse(Console.ReadLine(), out choice) ||
+                (choice < -1 || choice >= player.Hand.Count))
+            {
+                Console.Write("Invalid input. Choose again: ");
+            }
+
+            if (choice == -1)
+            {
+                HandlePass(player);
+                return;
+            }
+
+            var domino = player.Hand[choice];
+
+            bool canLeft = _board.CanPlace(domino, BoardSide.Left);
+            bool canRight = _board.CanPlace(domino, BoardSide.Right);
+
+            if (!canLeft && !canRight)
+            {
+                Console.WriteLine("That domino cannot be placed. You lose your turn.");
+                HandlePass(player);
+                return;
+            }
+
+            BoardSide side;
+
+            if (canLeft && canRight)
+            {
+                if (_board.IsEmpty)
+                {
+                    side = BoardSide.Left;
+                } else
+                {
+                    side = AskSide();
+                }
+            }
+            else if (canLeft)
+            {
+                side = BoardSide.Left;
+            }
+            else
+            {
+                side = BoardSide.Right;
+            }
 
             _board.Place(domino, side);
+
             player.Hand.Remove(domino);
             _consecutivePasses = 0;
 
@@ -250,8 +301,29 @@ namespace DominoGame
         private void HandlePass(IPlayer player)
         {
             // RULE: no draw, just pass
+            Console.WriteLine($"{player.Name} cannot play and is skipped.");
             _consecutivePasses++;
         }
+
+        public void SortPlayersByName()
+        {
+            _players.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private BoardSide AskSide()
+        {
+            Console.Write("Place on Left or Right? (L/R): ");
+            while (true)
+            {
+                var input = Console.ReadLine()!.Trim().ToUpper();
+                if (input == "L") return BoardSide.Left;
+                if (input == "R") return BoardSide.Right;
+
+                Console.Write("Invalid input. Enter L or R: ");
+            }
+        }
+
+
 
         // ================= ROUND END =================
 
@@ -385,19 +457,78 @@ namespace DominoGame
         public void Start()
         {
             while (!_controller.IsGameEnded)
-                _controller.PlayerAction();
+            {
+                _controller.StartRound();
+
+                while (!_controller.IsRoundEnded)
+                    _controller.PlayerAction();
+
+                Console.WriteLine("\n=== ROUND ENDED ===");
+                Console.ReadKey();
+            }
         }
+
 
         private void Subscribe()
         {
+            // _controller.TurnStarted += (s, e) =>
+            //     Console.WriteLine($"Turn: {((IPlayer)s!).Name}");
+
+            _controller.ActionExecuted += (s, e) =>
+            {
+                Console.WriteLine($"{((IPlayer)s!).Name} played a domino");
+                RenderBoard();
+            };
+
             _controller.TurnStarted += (s, e) =>
+            {
+                Console.Clear();
                 Console.WriteLine($"Turn: {((IPlayer)s!).Name}");
+                RenderBoard();
+            };
 
             _controller.RoundEnded += (s, e) =>
-                Console.WriteLine("Round Ended");
+            {
+                if (s is IPlayer winner)
+                    Console.WriteLine($"Round winner: {winner.Name}");
+                else
+                    Console.WriteLine("Round ended in a tie.");
+
+                RenderScores();
+            };
+
 
             _controller.GameEnded += (s, e) =>
                 Console.WriteLine($"Winner: {((IPlayer)s!).Name}");
+        }
+
+        private void RenderBoard()
+        {
+            Console.Write("Board: ");
+            if (_controller.BoardEmpty)
+            {
+                Console.WriteLine("(empty)");
+                return;
+            }
+
+            foreach (var d in _controller.BoardDominoes)
+                Console.Write($"{d} ");
+            Console.WriteLine();
+        }
+
+        private void RenderScores()
+        {
+            Console.WriteLine("\nCurrent Scores:");
+            foreach (var p in _controller.Players)
+                Console.WriteLine($"{p.Name} : {p.Score} points");
+        }
+
+
+        private void RenderHand(IPlayer player)
+        {
+            Console.WriteLine("Your hand:");
+            for (int i = 0; i < player.Hand.Count; i++)
+                Console.WriteLine($"{i}. {player.Hand[i]}");
         }
     }
 }
