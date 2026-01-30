@@ -112,7 +112,7 @@ namespace DominoGame
         public void Reset() => Dominoes.Clear();
     }
 
-    public class Player : IPlayer
+    public class Player
     {
         public string Name { get; }
         public int Score { get; set; }
