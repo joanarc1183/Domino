@@ -11,7 +11,7 @@ namespace DominoGame
         public event EventHandler? RoundEnded;
         public event EventHandler? GameEnded;
 
-        private readonly List<IPlayer> _players = new();
+        private readonly List<Player> _players = new();
         private readonly IBoard _board;
         private IBoneyard _boneyard;
         private int _currentPlayerIndex;
@@ -22,11 +22,11 @@ namespace DominoGame
 
         public bool IsRoundEnded => _roundEnded;
         public bool IsGameEnded { get; private set; }
-        public IPlayer? GameWinner { get; private set; }
+        public Player? GameWinner { get; private set; }
 
         public IEnumerable<IDomino> BoardDominoes => _board.Dominoes;
         public bool BoardEmpty => _board.IsEmpty;
-        public IEnumerable<IPlayer> Players => _players;
+        public IEnumerable<Player> Players => _players;
 
         public GameController(int maxScoreToWin)
         {
@@ -35,9 +35,9 @@ namespace DominoGame
             _boneyard = new Boneyard(GenerateFullSet());
         }
 
-        public void AddPlayer(IPlayer player) => _players.Add(player);
+        public void AddPlayer(Player player) => _players.Add(player);
 
-        public IPlayer GetCurrentPlayer() => _players[_currentPlayerIndex];
+        public Player GetCurrentPlayer() => _players[_currentPlayerIndex];
 
         public void StartRound()
         {
@@ -67,7 +67,7 @@ namespace DominoGame
 
         // ================= TURN HANDLING =================
 
-        private void HandlePlay(IPlayer player)
+        private void HandlePlay(Player player)
         {
             var playableIndexes = GetPlayableDominoIndexes(player);
 
@@ -142,7 +142,7 @@ namespace DominoGame
             }
         }
 
-        private void HandlePass(IPlayer player)
+        private void HandlePass(Player player)
         {
             // RULE: no draw, just pass
             Console.WriteLine($"{player.Name} cannot play and is skipped.");
@@ -167,7 +167,7 @@ namespace DominoGame
             }
         }
 
-        private List<int> GetPlayableDominoIndexes(IPlayer player)
+        private List<int> GetPlayableDominoIndexes(Player player)
         {
             var playable = new List<int>();
 
@@ -186,7 +186,7 @@ namespace DominoGame
             return playable;
         }
 
-        private void ShowPlayableDominoes(IPlayer player, List<int> playableIndexes)
+        private void ShowPlayableDominoes(Player player, List<int> playableIndexes)
         {
             Console.WriteLine("Playable dominoes:");
             foreach (var i in playableIndexes)
@@ -216,7 +216,7 @@ namespace DominoGame
             }
         }
 
-        private void HandleNormalWin(IPlayer winner)
+        private void HandleNormalWin(Player winner)
         {
             int score = _players
                 .Where(p => p != winner)
@@ -298,7 +298,7 @@ namespace DominoGame
                     p.Hand.Add(_boneyard.Draw());
         }
 
-        private bool CanPlay(IPlayer player) => player.Hand.Any(d => _board.CanPlace(d));
+        private bool CanPlay(Player player) => player.Hand.Any(d => _board.CanPlace(d));
 
         private void MoveNextPlayer() => _currentPlayerIndex = (_currentPlayerIndex + 1) % _players.Count;
 
@@ -342,24 +342,24 @@ namespace DominoGame
         private void Subscribe()
         {
             // _controller.TurnStarted += (s, e) =>
-            //     Console.WriteLine($"Turn: {((IPlayer)s!).Name}");
+            //     Console.WriteLine($"Turn: {((Player)s!).Name}");
 
             _controller.ActionExecuted += (s, e) =>
             {
-                Console.WriteLine($"{((IPlayer)s!).Name} played a domino");
+                Console.WriteLine($"{((Player)s!).Name} played a domino");
                 RenderBoard();
             };
 
             _controller.TurnStarted += (s, e) =>
             {
                 Console.Clear();
-                Console.WriteLine($"Turn: {((IPlayer)s!).Name}");
+                Console.WriteLine($"Turn: {((Player)s!).Name}");
                 RenderBoard();
             };
 
             _controller.RoundEnded += (s, e) =>
             {
-                if (s is IPlayer winner)
+                if (s is Player winner)
                     Console.WriteLine($"Round winner: {winner.Name}");
                 else
                     Console.WriteLine("Round ended in a tie.");
@@ -370,7 +370,7 @@ namespace DominoGame
 
 
             _controller.GameEnded += (s, e) =>
-                Console.WriteLine($"Winner: {((IPlayer)s!).Name}");
+                Console.WriteLine($"Winner: {((Player)s!).Name}");
         }
 
         private void RenderBoard()
