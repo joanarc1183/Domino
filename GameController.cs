@@ -13,7 +13,7 @@ namespace DominoGame
 
         private readonly List<Player> _players = new();
         private readonly IBoard _board;
-        private IBoneyard _boneyard;
+        private Boneyard _boneyard;
         private int _currentPlayerIndex;
         private int _roundLeaderIndex = -1;
         private int _consecutivePasses;

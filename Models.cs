@@ -35,7 +35,7 @@ namespace DominoGame
         public override string ToString() => $"[{LeftPip}|{RightPip}]";
     }
 
-    public class Boneyard : IBoneyard
+    public class Boneyard
     {
         public List<IDomino> Dominoes { get; private set; } = new();
         public bool IsEmpty => Dominoes.Count == 0;

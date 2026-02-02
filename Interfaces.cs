@@ -13,13 +13,6 @@ namespace DominoGame
         bool CanConnect(IDomino other);
     }
 
-    public interface IBoneyard
-    {
-        List<IDomino> Dominoes { get; }
-        IDomino Draw();
-        bool IsEmpty { get; }
-    }
-
     public interface IBoard
     {
         LinkedList<IDomino> Dominoes { get; }
@@ -30,13 +23,6 @@ namespace DominoGame
         bool CanPlace(IDomino domino, BoardSide side);
         void Place(IDomino domino, BoardSide side);
         void Reset();
-    }
-
-    public interface IPlayer
-    {
-        string Name { get; }
-        int Score { get; set; }
-        List<IDomino> Hand { get; }
     }
 
     public interface IConsoleRenderer
