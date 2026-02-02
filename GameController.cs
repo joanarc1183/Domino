@@ -24,7 +24,7 @@ namespace DominoGame
         public bool IsGameEnded { get; private set; }
         public Player? GameWinner { get; private set; }
 
-        public IEnumerable<IDomino> BoardDominoes => _board.Dominoes;
+        public IEnumerable<Domino> BoardDominoes => _board.Dominoes;
         public bool BoardEmpty => _board.IsEmpty;
         public IEnumerable<Player> Players => _players;
 
@@ -302,9 +302,9 @@ namespace DominoGame
 
         private void MoveNextPlayer() => _currentPlayerIndex = (_currentPlayerIndex + 1) % _players.Count;
 
-        private int CountPips(IEnumerable<IDomino> dominoes) => dominoes.Sum(d => (int)d.LeftPip + (int)d.RightPip);
+        private int CountPips(IEnumerable<Domino> dominoes) => dominoes.Sum(d => (int)d.LeftPip + (int)d.RightPip);
 
-        private IEnumerable<IDomino> GenerateFullSet()
+        private IEnumerable<Domino> GenerateFullSet()
         {
             for (int i = 0; i <= 6; i++)
                 for (int j = i; j <= 6; j++)

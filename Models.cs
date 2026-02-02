@@ -4,7 +4,7 @@ using System.Linq;
 
 namespace DominoGame
 {
-    public sealed class Domino : IDomino
+    public sealed class Domino
     {
         public Dot LeftPip { get; private set; }
         public Dot RightPip { get; private set; }
@@ -19,7 +19,7 @@ namespace DominoGame
 
         public bool IsDouble() => LeftPip == RightPip;
 
-        public bool CanConnect(IDomino other)
+        public bool CanConnect(Domino other)
         {
             return LeftPip == other.LeftPip ||
                    LeftPip == other.RightPip ||
@@ -37,16 +37,16 @@ namespace DominoGame
 
     public class Boneyard
     {
-        public List<IDomino> Dominoes { get; private set; } = new();
+        public List<Domino> Dominoes { get; private set; } = new();
         public bool IsEmpty => Dominoes.Count == 0;
 
-        public Boneyard(IEnumerable<IDomino> set)
+        public Boneyard(IEnumerable<Domino> set)
         {
             Dominoes = set.ToList();
             Shuffle();
         }
 
-        public IDomino Draw()
+        public Domino Draw()
         {
             if (IsEmpty) throw new InvalidOperationException("Boneyard empty");
             var d = Dominoes[0];
@@ -63,18 +63,18 @@ namespace DominoGame
 
     public class Board : IBoard
     {
-        public LinkedList<IDomino> Dominoes { get; private set; } = new();
+        public LinkedList<Domino> Dominoes { get; private set; } = new();
         public bool IsEmpty => Dominoes.Count == 0;
         public Dot LeftEnd => Dominoes.First!.Value.LeftPip;
         public Dot RightEnd => Dominoes.Last!.Value.RightPip;
 
-        public bool CanPlace(IDomino domino)
+        public bool CanPlace(Domino domino)
         {
             if (IsEmpty) return true;
             return CanPlace(domino, BoardSide.Left) || CanPlace(domino, BoardSide.Right);
         }
 
-        public bool CanPlace(IDomino domino, BoardSide side)
+        public bool CanPlace(Domino domino, BoardSide side)
         {
             if (IsEmpty) return true;
             return side == BoardSide.Left
@@ -82,7 +82,7 @@ namespace DominoGame
                 : domino.LeftPip == RightEnd || domino.RightPip == RightEnd;
         }
 
-        public void Place(IDomino domino, BoardSide side)
+        public void Place(Domino domino, BoardSide side)
         {
             if (!CanPlace(domino, side))
                 throw new InvalidOperationException("Invalid placement");
@@ -116,7 +116,7 @@ namespace DominoGame
     {
         public string Name { get; }
         public int Score { get; set; }
-        public List<IDomino> Hand { get; } = new();
+        public List<Domino> Hand { get; } = new();
 
         public Player(string name)
         {
