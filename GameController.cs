@@ -23,9 +23,6 @@ namespace DominoGame
         public bool IsRoundEnded => _roundEnded;
         public bool IsGameEnded { get; private set; }
         public Player? GameWinner { get; private set; }
-
-        public IEnumerable<Domino> BoardDominoes => _board.Dominoes;
-        public bool BoardEmpty => _board.IsEmpty;
         public IEnumerable<Player> Players => _players;
 
         public GameController(int maxScoreToWin)
@@ -46,11 +43,32 @@ namespace DominoGame
             DealInitialHands();
         }
 
+        public void StartGame()
+        {
+            while (!IsGameEnded)
+            {
+                StartRound();
+
+                while (!IsRoundEnded)
+                    PlayerAction();
+
+                Console.WriteLine("\n=== ROUND ENDED ===");
+                RenderHandsAtRoundEnd();
+                RenderScores();
+                Console.ReadKey();
+            }
+        }
+
         public void PlayerAction()
         {
             if (_roundEnded || IsGameEnded) return;
 
             var player = GetCurrentPlayer();
+            
+            Console.Clear();
+
+            Console.WriteLine($"Turn: {player.Name}");
+
             TurnStarted?.Invoke(player, EventArgs.Empty);
 
             if (CanPlay(player))
@@ -65,10 +83,52 @@ namespace DominoGame
             MoveNextPlayer();
         }
 
+        private void RenderBoard()
+        {
+            Console.Write("Board: ");
+            if (_board.IsEmpty)
+            {
+                Console.WriteLine("(empty)");
+                return;
+            }
+
+            foreach (var d in _board.Dominoes)
+                Console.Write($"{d} ");
+            Console.WriteLine();
+        }
+
+        private void RenderScores()
+        {
+            Console.WriteLine("\nCurrent Scores:");
+            foreach (var p in _players)
+                Console.WriteLine($"{p.Name} : {p.Score} points");
+        }
+
+        private void RenderHandsAtRoundEnd()
+        {
+            Console.WriteLine("\nHands at round end:");
+            foreach (var p in _players)
+            {
+                Console.Write($"{p.Name}: ");
+                if (p.Hand.Count == 0)
+                {
+                    Console.WriteLine("(empty)");
+                }
+                else
+                {
+                    foreach (var d in p.Hand)
+                        Console.Write($"{d} ");
+                    Console.WriteLine();
+                }
+            }
+        }
+
+
         // ================= TURN HANDLING =================
 
         private void HandlePlay(Player player)
         {
+            RenderBoard();
             var playableIndexes = GetPlayableDominoIndexes(player);
 
             // 🚫 Kalau benar-benar tidak ada kartu valid → pass
@@ -310,108 +370,5 @@ namespace DominoGame
                 for (int j = i; j <= 6; j++)
                     yield return new Domino((Dot)i, (Dot)j);
         }
-    }
-
-    // ================= CONSOLE RENDERER =================
-
-    public class ConsoleRenderer : IConsoleRenderer
-    {
-        private readonly GameController _controller;
-
-        public ConsoleRenderer(GameController controller)
-        {
-            _controller = controller;
-            Subscribe();
-        }
-
-        public void Start()
-        {
-            while (!_controller.IsGameEnded)
-            {
-                _controller.StartRound();
-
-                while (!_controller.IsRoundEnded)
-                    _controller.PlayerAction();
-
-                Console.WriteLine("\n=== ROUND ENDED ===");
-                Console.ReadKey();
-            }
-        }
-
-
-        private void Subscribe()
-        {
-            // _controller.TurnStarted += (s, e) =>
-            //     Console.WriteLine($"Turn: {((Player)s!).Name}");
-
-            _controller.ActionExecuted += (s, e) =>
-            {
-                Console.WriteLine($"{((Player)s!).Name} played a domino");
-                RenderBoard();
-            };
-
-            _controller.TurnStarted += (s, e) =>
-            {
-                Console.Clear();
-                Console.WriteLine($"Turn: {((Player)s!).Name}");
-                RenderBoard();
-            };
-
-            _controller.RoundEnded += (s, e) =>
-            {
-                if (s is Player winner)
-                    Console.WriteLine($"Round winner: {winner.Name}");
-                else
-                    Console.WriteLine("Round ended in a tie.");
-
-                RenderHandsAtRoundEnd();
-                RenderScores();
-            };
-
-
-            _controller.GameEnded += (s, e) =>
-                Console.WriteLine($"Winner: {((Player)s!).Name}");
-        }
-
-        private void RenderBoard()
-        {
-            Console.Write("Board: ");
-            if (_controller.BoardEmpty)
-            {
-                Console.WriteLine("(empty)");
-                return;
-            }
-
-            foreach (var d in _controller.BoardDominoes)
-                Console.Write($"{d} ");
-            Console.WriteLine();
-        }
-
-        private void RenderScores()
-        {
-            Console.WriteLine("\nCurrent Scores:");
-            foreach (var p in _controller.Players)
-                Console.WriteLine($"{p.Name} : {p.Score} points");
-        }
-
-        private void RenderHandsAtRoundEnd()
-        {
-            Console.WriteLine("\nHands at round end:");
-            foreach (var p in _controller.Players)
-            {
-                Console.Write($"{p.Name}: ");
-                if (p.Hand.Count == 0)
-                {
-                    Console.WriteLine("(empty)");
-                }
-                else
-                {
-                    foreach (var d in p.Hand)
-                        Console.Write($"{d} ");
-                    Console.WriteLine();
-                }
-            }
-        }
-
     }
 }

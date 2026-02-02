@@ -15,9 +15,4 @@ namespace DominoGame
         void Place(Domino domino, BoardSide side);
         void Reset();
     }
-
-    public interface IConsoleRenderer
-    {
-        void Start();
-    }
 }

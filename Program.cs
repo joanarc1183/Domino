@@ -22,8 +22,7 @@ namespace DominoGame
 
             controller.SortPlayersByName();
 
-            var renderer = new ConsoleRenderer(controller);
-            renderer.Start();
+            controller.StartGame();
         }
 
     }
