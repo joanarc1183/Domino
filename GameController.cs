@@ -6,261 +6,137 @@ namespace DominoGame
 {
     public class GameController
     {
-        public event EventHandler? TurnStarted;
-        public event EventHandler? ActionExecuted;
-        public event EventHandler? RoundEnded;
-        public event EventHandler? GameEnded;
+        // ================= EVENTS =================
+        public event Action<Player>? OnTurnChanged;
+        public event Action<Player, Domino, BoardSide>? OnDominoPlaced;
+        public event Action<Player>? OnPlayerPassed;
+        public event Action<
+            Player?,                 // winner (null kalau tie)
+            bool,                    // isBlocked
+            IReadOnlyDictionary<Player, IReadOnlyList<Domino>>
+        >? OnRoundEnded;
+        public event Action<Player>? OnGameEnded;
 
-        private readonly List<Player> _players = new();
+        // ================= FIELDS =================
+        private readonly List<Player> _players;
+        private readonly Dictionary<Player, List<Domino>> _dominoInHands;
         private readonly IBoard _board;
         private Boneyard _boneyard;
+
         private int _currentPlayerIndex;
-        private int _roundLeaderIndex = -1;
+        // private int _roundLeaderIndex = -1;
         private int _consecutivePasses;
         private bool _roundEnded;
+        private bool _isGameEnded;
+        private Player? _gameWinner;
         private readonly int _maxScoreToWin;
 
+        // ================= PROPERTIES =================
+        public IReadOnlyList<Player> Players => _players;
+        public Player CurrentPlayer => _players[_currentPlayerIndex];
+        public IBoard Board => _board;
         public bool IsRoundEnded => _roundEnded;
-        public bool IsGameEnded { get; private set; }
-        public Player? GameWinner { get; private set; }
-        public IEnumerable<Player> Players => _players;
+        public bool IsGameEnded => _isGameEnded;
+        public Player? GameWinner => _gameWinner;
+        // public IEnumerable<Player> Players => _players;
 
-        public GameController(int maxScoreToWin)
+        // ================= CONSTRUCTOR =================
+        public GameController(List<Player> players, IBoard board, int maxScoreToWin)
         {
+            _players = players;
+            _board = board;
             _maxScoreToWin = maxScoreToWin;
-            _board = new Board();
+            _dominoInHands = players.ToDictionary(p => p, _ => new List<Domino>());
             _boneyard = new Boneyard(GenerateFullSet());
         }
 
-        public void AddPlayer(Player player) => _players.Add(player);
-
-        public Player GetCurrentPlayer() => _players[_currentPlayerIndex];
+        // ================= GAME FLOW =================
 
         public void StartRound()
         {
             ResetRound();
-            DecideFirstPlayer();
+            // DecideFirstPlayer();
             DealInitialHands();
+            OnTurnChanged?.Invoke(CurrentPlayer);
         }
 
-        public void StartGame()
+        public void NextTurn()
         {
-            while (!IsGameEnded)
+            if (_roundEnded || _isGameEnded) return;
+
+            var player = CurrentPlayer;
+
+            if (!CanPlay(player))
             {
-                StartRound();
-
-                while (!IsRoundEnded)
-                    PlayerAction();
-
-                Console.WriteLine("\n=== ROUND ENDED ===");
-                RenderHandsAtRoundEnd();
-                RenderScores();
-                Console.ReadKey();
+                PassTurn(player);
             }
-        }
-
-        public void PlayerAction()
-        {
-            if (_roundEnded || IsGameEnded) return;
-
-            var player = GetCurrentPlayer();
-            
-            Console.Clear();
-
-            Console.WriteLine($"Turn: {player.Name}");
-
-            TurnStarted?.Invoke(player, EventArgs.Empty);
-
-            if (CanPlay(player))
-                HandlePlay(player);
-            else
-                HandlePass(player);
-                // kalau setelah pass langsung round ended, jangan spam pesan
-                if (_roundEnded)
-                    return;
 
             CheckRoundEnd();
-            MoveNextPlayer();
-        }
 
-        private void RenderBoard()
-        {
-            Console.Write("Board: ");
-            if (_board.IsEmpty)
+            if (!_roundEnded)
             {
-                Console.WriteLine("(empty)");
-                return;
-            }
-
-            foreach (var d in _board.Dominoes)
-                Console.Write($"{d} ");
-            Console.WriteLine();
-        }
-
-        private void RenderScores()
-        {
-            Console.WriteLine("\nCurrent Scores:");
-            foreach (var p in _players)
-                Console.WriteLine($"{p.Name} : {p.Score} points");
-        }
-
-        private void RenderHandsAtRoundEnd()
-        {
-            Console.WriteLine("\nHands at round end:");
-            foreach (var p in _players)
-            {
-                Console.Write($"{p.Name}: ");
-                if (p.Hand.Count == 0)
-                {
-                    Console.WriteLine("(empty)");
-                }
-                else
-                {
-                    foreach (var d in p.Hand)
-                        Console.Write($"{d} ");
-                    Console.WriteLine();
-                }
+                _currentPlayerIndex = (_currentPlayerIndex + 1) % _players.Count;
+                OnTurnChanged?.Invoke(CurrentPlayer);
             }
         }
+    
+        // ================= PLAYER ACTIONS =================
+        public IReadOnlyList<Domino> GetHands(Player player)
+            => _dominoInHands[player].AsReadOnly();
 
-
-        // ================= TURN HANDLING =================
-
-        private void HandlePlay(Player player)
+        public bool PlayDomino(Player player, Domino domino, BoardSide side)
         {
-            RenderBoard();
-            var playableIndexes = GetPlayableDominoIndexes(player);
+            if (player != CurrentPlayer)
+                return false;
 
-            // 🚫 Kalau benar-benar tidak ada kartu valid → pass
-            if (playableIndexes.Count == 0)
-            {
-                Console.WriteLine($"{player.Name} has no playable dominoes.");
-                HandlePass(player);
-                return;
-            }
 
-            Console.WriteLine("\nChoose a domino index to play:");
+            if (!_board.CanPlace(domino, side))
+                return false;
 
-            for (int i = 0; i < player.Hand.Count; i++)
-                Console.WriteLine($"{i}. {player.Hand[i]}");
+            _board.Place(domino, side);
+            _dominoInHands[player].Remove(domino);
+            _consecutivePasses = 0;
 
-            while (true)
-            {
-                Console.Write("> ");
-                if (!int.TryParse(Console.ReadLine(), out int choice))
-                {
-                    Console.WriteLine("Invalid input.");
-                    continue;
-                }
-
-                // ❌ player mencoba pass padahal bisa main
-                if (choice == -1)
-                {
-                    Console.WriteLine("You have playable dominoes. You must play one.");
-                    ShowPlayableDominoes(player, playableIndexes);
-                    continue;
-                }
-
-                if (choice < 0 || choice >= player.Hand.Count)
-                {
-                    Console.WriteLine("Index out of range.");
-                    continue;
-                }
-
-                // ❌ domino tidak bisa dimainkan
-                if (!playableIndexes.Contains(choice))
-                {
-                    Console.WriteLine("That domino cannot be played.");
-                    ShowPlayableDominoes(player, playableIndexes);
-                    continue; // 🔁 ulang input
-                }
-
-                // ✅ domino valid
-                var domino = player.Hand[choice];
-
-                // Board masih kosong → langsung taruh
-                if (_board.IsEmpty)
-                {
-                    _board.Place(domino, BoardSide.Left);
-                }
-                else
-                {
-                    bool canLeft = _board.CanPlace(domino, BoardSide.Left);
-                    bool canRight = _board.CanPlace(domino, BoardSide.Right);
-
-                    BoardSide side = (canLeft && canRight)
-                        ? AskSide()
-                        : (canLeft ? BoardSide.Left : BoardSide.Right);
-
-                    _board.Place(domino, side);
-                }
-
-                player.Hand.RemoveAt(choice);
-                _consecutivePasses = 0;
-                ActionExecuted?.Invoke(player, EventArgs.Empty);
-                break;
-            }
+            OnDominoPlaced?.Invoke(player, domino, side);
+            
+            return true;
         }
 
-        private void HandlePass(Player player)
+        public bool PassTurn(Player player)
         {
-            // RULE: no draw, just pass
-            Console.WriteLine($"{player.Name} cannot play and is skipped.");
+            if (player != CurrentPlayer)
+                return false;
+
             _consecutivePasses++;
+            OnPlayerPassed?.Invoke(player);
+            
+            return true;
         }
 
-        public void SortPlayersByName()
+        public bool CanPlay(Player player)
         {
-            _players.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
-        }
+            if (_board.IsEmpty)
+                return _dominoInHands[player].Count > 0;
 
-        private BoardSide AskSide()
-        {
-            Console.Write("Place on Left or Right? (L/R): ");
-            while (true)
-            {
-                var input = Console.ReadLine()!.Trim().ToUpper();
-                if (input == "L") return BoardSide.Left;
-                if (input == "R") return BoardSide.Right;
-
-                Console.Write("Invalid input. Enter L or R: ");
-            }
-        }
-
-        private List<int> GetPlayableDominoIndexes(Player player)
-        {
-            var playable = new List<int>();
-
-            for (int i = 0; i < player.Hand.Count; i++)
-            {
-                var d = player.Hand[i];
-
-                if (_board.IsEmpty ||
+            return _dominoInHands[player]
+                .Any(d =>
                     _board.CanPlace(d, BoardSide.Left) ||
-                    _board.CanPlace(d, BoardSide.Right))
-                {
-                    playable.Add(i);
-                }
-            }
-
-            return playable;
+                    _board.CanPlace(d, BoardSide.Right));
         }
 
-        private void ShowPlayableDominoes(Player player, List<int> playableIndexes)
+
+        public int CountPips(Player player)
         {
-            Console.WriteLine("Playable dominoes:");
-            foreach (var i in playableIndexes)
-                Console.WriteLine($"  {i}. {player.Hand[i]}");
+            return _dominoInHands[player]
+                .Sum(d => (int)d.LeftPip + (int)d.RightPip);
         }
-
-
 
         // ================= ROUND END =================
-
         private void CheckRoundEnd()
         {
             // Normal win
-            var emptyPlayer = _players.FirstOrDefault(p => p.Hand.Count == 0);
+            var emptyPlayer = _players.FirstOrDefault(p => _dominoInHands[p].Count == 0);
+            
             if (emptyPlayer != null)
             {
                 _roundEnded = true;
@@ -280,20 +156,17 @@ namespace DominoGame
         {
             int score = _players
                 .Where(p => p != winner)
-                .SelectMany(p => p.Hand)
+                .SelectMany(p => _dominoInHands[p])
                 .Sum(d => (int)d.LeftPip + (int)d.RightPip);
 
             winner.Score += score;
-            RoundEnded?.Invoke(winner, EventArgs.Empty);
+            OnRoundEnded?.Invoke(winner, false, SnapshotHands());
             CheckGameEnd();
         }
 
         private void HandleBlockedGame()
         {
-            var pipTotals = _players.ToDictionary(
-                p => p,
-                p => CountPips(p.Hand)
-            );
+            var pipTotals = _players.ToDictionary(p => p, CountPips);
 
             int min = pipTotals.Min(x => x.Value);
             var lowestPlayers = pipTotals.Where(x => x.Value == min).ToList();
@@ -301,45 +174,31 @@ namespace DominoGame
             // Tie → no winner
             if (lowestPlayers.Count > 1)
             {
-                RoundEnded?.Invoke(null, EventArgs.Empty);
+                OnRoundEnded?.Invoke(null, true, SnapshotHands());
                 return;
             }
 
             var winner = lowestPlayers.First().Key;
 
-            int others = pipTotals
-                .Where(x => x.Key != winner)
-                .Sum(x => x.Value);
+            int gain = pipTotals.Sum(x => x.Value) - pipTotals[winner];
+            winner.Score += gain;
 
-            winner.Score += others - pipTotals[winner];
-            RoundEnded?.Invoke(winner, EventArgs.Empty);
+            OnRoundEnded?.Invoke(winner, true, SnapshotHands());
             CheckGameEnd();
         }
 
         // ================= GAME END =================
-
         private void CheckGameEnd()
         {
-            GameWinner = _players.FirstOrDefault(p => p.Score >= _maxScoreToWin);
-            if (GameWinner != null)
+            _gameWinner = _players.FirstOrDefault(p => p.Score >= _maxScoreToWin);
+            if (_gameWinner != null)
             {
-                IsGameEnded = true;
-                GameEnded?.Invoke(GameWinner, EventArgs.Empty);
+                _isGameEnded = true;
+                OnGameEnded?.Invoke(_gameWinner);
             }
         }
 
-        // ================= SETUP =================
-
-        private void DecideFirstPlayer()
-        {
-            if (_roundLeaderIndex == -1)
-                _roundLeaderIndex = new Random().Next(_players.Count);
-            else
-                _roundLeaderIndex = (_roundLeaderIndex + 1) % _players.Count;
-
-            _currentPlayerIndex = _roundLeaderIndex;
-        }
-
+        // ================= INTERNAL HELPERS =================
         private void ResetRound()
         {
             _board.Reset();
@@ -348,27 +207,30 @@ namespace DominoGame
             _roundEnded = false;
 
             foreach (var p in _players)
-                p.Hand.Clear();
+                _dominoInHands[p].Clear();
+
         }
 
         private void DealInitialHands()
         {
             for (int i = 0; i < 7; i++)
                 foreach (var p in _players)
-                    p.Hand.Add(_boneyard.Draw());
+                    _dominoInHands[p].Add(_boneyard.Draw());
         }
-
-        private bool CanPlay(Player player) => player.Hand.Any(d => _board.CanPlace(d));
-
-        private void MoveNextPlayer() => _currentPlayerIndex = (_currentPlayerIndex + 1) % _players.Count;
-
-        private int CountPips(IEnumerable<Domino> dominoes) => dominoes.Sum(d => (int)d.LeftPip + (int)d.RightPip);
-
         private IEnumerable<Domino> GenerateFullSet()
         {
             for (int i = 0; i <= 6; i++)
                 for (int j = i; j <= 6; j++)
                     yield return new Domino((Dot)i, (Dot)j);
         }
+
+        private IReadOnlyDictionary<Player, IReadOnlyList<Domino>> SnapshotHands()
+        {
+            return _dominoInHands.ToDictionary(
+                kvp => kvp.Key,
+                kvp => (IReadOnlyList<Domino>)kvp.Value.AsReadOnly()
+            );
+        }
+
     }
 }
